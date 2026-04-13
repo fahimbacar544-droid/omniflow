@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  password     String
+  name         String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  subscription Subscription?
+  shops        Shop[]
+  warehouses   Warehouse[]
+  suppliers    Supplier[]
+  automations  Automation[]
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  user                 User      @relation(fields: [userId], references: [id])
+  plan                 Plan      @default(FREE)
+  status               SubStatus @default(ACTIVE)
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  currentPeriodEnd     DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+}
+
+enum Plan      { FREE STARTER PRO BUSINESS ENTERPRISE }
+enum SubStatus { ACTIVE CANCELLED PAST_DUE TRIALING }
+
+model Shop {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  name      String
+  platform  Platform
+  url       String?
+  apiKey    String?
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  orders    Order[]
+  products  Product[]
+}
+
+enum Platform { SHOPIFY WOOCOMMERCE PRESTASHOP AMAZON_FBA ETSY TIKTOK_SHOP MANUAL }
+
+model Product {
+  id         String      @id @default(cuid())
+  shopId     String
+  shop       Shop        @relation(fields: [shopId], references: [id])
+  name       String
+  sku        String
+  price      Float       @default(0)
+  cost       Float       @default(0)
+  imageUrl   String?
+  active     Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  stocks     Stock[]
+  orderItems OrderItem[]
+  @@unique([shopId, sku])
+}
+
+model Warehouse {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  name      String
+  country   String   @default("FR")
+  address   String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  stocks    Stock[]
+}
+
+model Stock {
+  id          String    @id @default(cuid())
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  quantity    Int       @default(0)
+  reserved    Int       @default(0)
+  updatedAt   DateTime  @updatedAt
+  @@unique([productId, warehouseId])
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  shopId          String
+  shop            Shop        @relation(fields: [shopId], references: [id])
+  externalId      String?
+  status          OrderStatus @default(PENDING)
+  customerName    String?
+  customerEmail   String?
+  customerAddress String?
+  customerCountry String?     @default("FR")
+  total           Float       @default(0)
+  currency        String      @default("EUR")
+  notes           String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  items           OrderItem[]
+  shipment        Shipment?
+}
+
+enum OrderStatus { PENDING CONFIRMED PROCESSING SHIPPED DELIVERED CANCELLED REFUNDED }
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Float
+}
+
+model Shipment {
+  id                String         @id @default(cuid())
+  orderId           String         @unique
+  order             Order          @relation(fields: [orderId], references: [id])
+  carrier           Carrier
+  trackingNumber    String?
+  status            ShipmentStatus @default(LABEL_CREATED)
+  estimatedDelivery DateTime?
+  shippedAt         DateTime?
+  deliveredAt       DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  events            TrackingEvent[]
+}
+
+enum Carrier        { COLISSIMO CHRONOPOST DHL UPS FEDEX YUNEXPRESS FOURPX CAINIAO OTHER }
+enum ShipmentStatus { LABEL_CREATED IN_TRANSIT OUT_FOR_DELIVERY DELIVERED EXCEPTION RETURNED }
+
+model TrackingEvent {
+  id         String   @id @default(cuid())
+  shipmentId String
+  shipment   Shipment @relation(fields: [shipmentId], references: [id])
+  status     String
+  location
